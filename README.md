@@ -1,2 +1,0 @@
-# nutr.ia
-Nutri.IA
