@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useLayoutEffect  } from "react";
 
 function AtendimentoDetalhes({ atendimento, onVoltar }) {
   const [inputChat, setInputChat] = useState("");
@@ -27,6 +27,7 @@ function AtendimentoDetalhes({ atendimento, onVoltar }) {
   });
 
   const API_BASE = "http://localhost:8000/api.php";
+  // const API_BASE = "http://172.19.142.153:8000/api.php";
 
   const carregarPlanos = async () => {
     try {
@@ -69,7 +70,7 @@ function AtendimentoDetalhes({ atendimento, onVoltar }) {
     if (!inputChat.trim()) return;
 
     // Adiciona a mensagem do usuário no chat
-    const msgUser = { role: "user", text: inputChat };
+    const msgUser = { role: "user", text: inputChat, timestamp: new Date().toLocaleString("pt-BR")};
     setChatMessages((prev) => [...prev, msgUser]);
     setHistoricoChat((prev) => [...prev, msgUser]);
     setInputChat("");
@@ -98,7 +99,7 @@ function AtendimentoDetalhes({ atendimento, onVoltar }) {
         data.resposta ||
         "(sem resposta da IA)";
 
-      const msgIA = { role: "assistant", text: respostaTexto };
+      const msgIA = { role: "assistant", text: respostaTexto, timestamp: new Date().toLocaleString("pt-BR")};
 
       // adiciona mensagem da IA ao chat e histórico
       setChatMessages((prev) => [...prev, msgIA]);
@@ -115,6 +116,7 @@ function AtendimentoDetalhes({ atendimento, onVoltar }) {
               plano_id: planoSelecionado,
               descricao: r.nome || r.descricao || "Nova refeição",
               horario: r.horario || "00:00",
+              itens: r.itens,
             }),
           });
         }
@@ -137,9 +139,17 @@ function AtendimentoDetalhes({ atendimento, onVoltar }) {
     if (planoSelecionado) {
       fetch(`${API_BASE}?action=listar_historico&atendimento_id=${planoSelecionado}`)
         .then(res => res.json())
-        .then(setChatMessages)
+        .then(data => {
+          // formata cada mensagem recebida
+          const mensagensTratadas = data.map(msg => ({
+            ...msg,
+            timestamp: formatarData(msg.timestamp)
+          }));
+
+          setChatMessages(mensagensTratadas);
+        });
     }
-  }, [planoSelecionado])
+  }, [planoSelecionado]);
 
   const carregarItensDaRefeicao = async (refeicaoId) => {
     setRefeicaoSelecionada(refeicaoId);
@@ -206,6 +216,19 @@ function AtendimentoDetalhes({ atendimento, onVoltar }) {
     }
     setCelulaEditando(null);
   };
+
+  const chatRef = useRef(null);
+
+  useLayoutEffect(() => {
+    const box = chatRef.current;
+    if (!box) return;
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        box.scrollTop = box.scrollHeight;
+      });
+    });
+  }, [chatMessages, loading]);
 
   return (
     <div className="card p-4 shadow">
@@ -421,24 +444,33 @@ function AtendimentoDetalhes({ atendimento, onVoltar }) {
           {abaPainel === "ia" && (
             <>
               <h5>Chat com IA</h5>
-                <div className="border rounded p-2 mb-2 bg-light" style={{ height: "250px", overflowY: "auto" }}>
+                <div 
+                  ref={chatRef}
+                  className="border rounded bg-light"
+                  style={{ height: "250px", overflowY: "auto", padding: "8px" }}
+                >
                   {chatMessages.map((msg, i) => (
                     <div
                       key={i}
-                      className={`mb-2 ${msg.role === "user" ? "text-end" : "text-start"}`}
+                      className={`d-flex flex-column mb-2 ${
+                        msg.role === "user" ? "align-items-end" : "align-items-start"
+                      }`}
                     >
-                      <span
-                        className={`badge bg-${
-                          msg.role === "user" ? "primary" : "secondary"
+                      <div
+                        className={`p-2 rounded shadow-sm ${
+                          msg.role === "user" ? "bg-primary text-white user-bubble" : "bg-secondary text-white assistant-bubble"
                         }`}
                         style={{
+                          maxWidth: "75%",
                           whiteSpace: "pre-wrap",
                           wordBreak: "break-word",
-                          textAlign: msg.role === "user" ? "right" : "left",
-                          display: "block",
                         }}
                       >
                         {msg.text}
+                      </div>
+
+                      <span className="text-muted mt-1" style={{ fontSize: "0.75rem" }}>
+                        {msg.timestamp}
                       </span>
                     </div>
                   ))}
@@ -742,6 +774,22 @@ function AtendimentoDetalhes({ atendimento, onVoltar }) {
       )}
     </div>
   );
+}
+
+function formatarData(mysqlDate) {
+  if (!mysqlDate) return "";
+
+  const data = new Date(mysqlDate);
+
+  if (isNaN(data.getTime())) return ""; // evita erro se vier formato inesperado
+
+  return data.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export default AtendimentoDetalhes;

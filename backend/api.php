@@ -26,6 +26,16 @@ switch ($action) {
   case 'cadastrar_pacientes':
     PacientesController::cadastrar_pacientes($input);
     break;
+  case 'atualizar_paciente':
+    PacientesController::atualizar_paciente($input);
+    break;
+  case 'cadastrar_biometria':
+    PacientesController::cadastrar_biometria($input);
+    break;
+  case 'listar_historico_biometrico':
+    $id = intval($_GET["paciente_id"]);
+    PacientesController::listar_historico_biometrico($id);
+    break;
 
   // Atendimentos
   case 'listar_atendimentos':

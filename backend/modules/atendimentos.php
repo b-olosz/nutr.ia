@@ -73,8 +73,33 @@ class AtendimentosController {
     Response::json(['ok' => true, 'id' => $pdo->lastInsertId()]);
   }
 
+  public static function salvar_item_process($data) {
+    global $pdo;
+
+    $stmt = $pdo->prepare("
+      INSERT INTO itens_refeicao (refeicao_id, descricao, unidade_medida, quantidade)
+      VALUES (?, ?, ?, ?)
+    ");
+    $stmt->execute([
+      $data['refeicao_id'] ?? null,
+      $data['descricao'] ?? null,
+      $data['unidade_medida'] ?? null,
+      $data['quantidade'] ?? null
+    ]);
+
+    return $pdo->lastInsertId();
+  }
+  
+  public static function salvar_item($data) {
+    $id = AtendimentosController::salvar_item_process($data);
+
+    Response::json(['ok' => true, 'id' => $id]);
+  }
+
   public static function salvar_refeicao_ia($data) {
     global $pdo;
+
+    $refeicao_id = null;
 
     $stmt = $pdo->prepare("SELECT * FROM refeicoes WHERE plano_id = ? and descricao LIKE ?");
     $stmt->execute([
@@ -83,8 +108,21 @@ class AtendimentosController {
     ]);
 
     $response = $stmt->fetchAll();
+    // print_r($response);
 
-    if(empty($response)){
+    if(isset($response[0]['id'])){
+      $refeicao_id = $response[0]['id'];
+
+      $stmt = $pdo->prepare("
+        DELETE FROM valores_nutricionais WHERE item_refeicao_id = ?
+      ");
+      $stmt->execute([$refeicao_id]);
+      $stmt = $pdo->prepare("
+        DELETE FROM itens_refeicao WHERE id = ?
+      ");
+      $stmt->execute([$refeicao_id]);
+    }
+    else{
       $stmt = $pdo->prepare("
         INSERT INTO refeicoes (plano_id, descricao, hora_inicial)
         VALUES (?, ?, ?)
@@ -94,12 +132,22 @@ class AtendimentosController {
         $data['descricao'] ?? null,
         $data['horario'] ?? null
       ]);
+
+      $refeicao_id = $pdo->lastInsertId();
     }
 
-    print_r($response);
-    // exit;
-
-    Response::json(['ok' => true, 'id' => $pdo->lastInsertId()]);
+    if($refeicao_id){
+      foreach($data['itens'] as $item){
+        AtendimentosController::salvar_item_process([
+          'refeicao_id' => $refeicao_id,
+          'descricao' => $item['descricao'],
+          'unidade_medida' => $item['unidade_medida'],
+          'quantidade' => $item['quantidade']
+        ]);
+      }
+    }
+    
+    Response::json(['ok' => true]);
   }
 
   public static function listar_itens($id) {
@@ -128,21 +176,6 @@ class AtendimentosController {
 
   //   Response::json($stmt->fetchAll());
   // }
-
-  public static function salvar_item($data) {
-    global $pdo;
-    $stmt = $pdo->prepare("
-      INSERT INTO itens_refeicao (refeicao_id, descricao, unidade_medida, quantidade)
-      VALUES (?, ?, ?, ?)
-    ");
-    $stmt->execute([
-      $data['refeicao_id'] ?? null,
-      $data['descricao'] ?? null,
-      $data['unidade_medida'] ?? null,
-      $data['quantidade'] ?? null
-    ]);
-    Response::json(['ok' => true, 'id' => $pdo->lastInsertId()]);
-  }
 
   public static function salvar_nutrientes($data) {
     global $pdo;
@@ -178,9 +211,20 @@ class AtendimentosController {
   public static function listar_historico($atendimento_id) {
     global $pdo;
   
-    $stmt = $pdo->prepare("SELECT * FROM historico_chat WHERE atendimento_id = ? ORDER BY id ASC");
+    $stmt = $pdo->prepare("SELECT role, mensagem text, data_criacao timestamp FROM historico_chat WHERE atendimento_id = ? ORDER BY data_criacao ASC");
     $stmt->execute([$atendimento_id]);
 
-    Response::json($stmt->fetchAll());
+
+    $results = $stmt->fetchAll();
+
+    foreach($results as &$res){
+      if($res['role'] == "assistant"){
+        $msg = json_decode($res['text'], true);
+        // print_r($msg);exit;
+        $res['text'] = $msg['resposta_textual'];
+      }
+    }
+
+    Response::json($results);
   }
 }
